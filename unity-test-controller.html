@@ -1,0 +1,78 @@
+<!doctype html>
+<html>
+<head>
+    <title>Unity Test Controller</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { padding: 10px; background: #e0e0e0; margin: 10px 0; }
+        button { padding: 10px; margin: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Unity Test Controller</h1>
+    
+    <div class="status">
+        <strong>Status:</strong> <span id="status">Ready</span>
+    </div>
+    
+    <div class="status">
+        <strong>Orientation Data:</strong> <span id="orientationData">Waiting...</span>
+    </div>
+    
+    <button onclick="startBroadcasting()">Start Broadcasting</button>
+    <button onclick="stopBroadcasting()">Stop Broadcasting</button>
+    
+    <script>
+        let isBroadcasting = false;
+        let alpha = 0, beta = 0, gamma = 0;
+        let gotOrientation = false;
+        
+        // Device orientation event
+        window.addEventListener('deviceorientation', (e) => {
+            if (e.alpha !== null && e.beta !== null && e.gamma !== null) {
+                alpha = e.alpha;
+                beta = e.beta;
+                gamma = e.gamma;
+                gotOrientation = true;
+            }
+        }, true);
+        
+        function startBroadcasting() {
+            isBroadcasting = true;
+            document.getElementById('status').textContent = 'Broadcasting...';
+            
+            // Update orientation data continuously
+            const interval = setInterval(() => {
+                if (gotOrientation && isBroadcasting) {
+                    // Create quaternion-like data that Unity can easily find
+                    const q = [alpha/180, beta/180, gamma/180, 1.0];
+                    
+                    // Update the display with the exact format Unity is looking for
+                    document.getElementById('orientationData').innerHTML = 
+                        `Orientation: [${q.map(v => v.toFixed(4)).join(', ')}]`;
+                    
+                    // Also add some debug info
+                    document.getElementById('status').textContent = 
+                        `Broadcasting - Alpha: ${alpha.toFixed(1)}°, Beta: ${beta.toFixed(1)}°, Gamma: ${gamma.toFixed(1)}°`;
+                }
+            }, 100); // Update 10 times per second
+            
+            window.broadcastInterval = interval;
+        }
+        
+        function stopBroadcasting() {
+            isBroadcasting = false;
+            document.getElementById('status').textContent = 'Stopped';
+            
+            if (window.broadcastInterval) {
+                clearInterval(window.broadcastInterval);
+                window.broadcastInterval = null;
+            }
+        }
+        
+        // Initialize
+        document.getElementById('status').textContent = 'Ready - Grant motion permissions to start';
+    </script>
+</body>
+</html>
