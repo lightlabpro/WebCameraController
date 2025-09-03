@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>Unity Camera Controller</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 20px; background: #1a1a1a; color: white; }
+  .status { padding: 10px; border-radius: 8px; margin: 10px 0; }
+  .active { background: #198754; }
+  .inactive { background: #6c757d; }
+  button { padding: 10px 14px; border: none; border-radius: 8px; background: #0d6efd; color: white; margin: 5px; }
+  .info { background: #f8f9fa; color: #212529; padding: 15px; border-radius: 8px; margin: 15px 0; }
+  .url-box { background: #2d2d2d; padding: 10px; border-radius: 5px; font-family: monospace; word-break: break-all; }
+  .unity-url { background: #0d6efd; color: white; padding: 15px; border-radius: 8px; margin: 15px 0; }
+</style>
+</head>
+<body>
+  <h1>📱 Unity Camera Controller</h1>
+  
+  <div id="status" class="status inactive">Waiting for Unity connection...</div>
+  
+  <div class="unity-url">
+    <h3>🎯 Unity Connection URL:</h3>
+    <div class="url-box" id="unityUrl">Loading...</div>
+    <p><strong>Copy this URL and paste it in Unity!</strong></p>
+  </div>
+
+  <div class="info">
+    <h3>How to use:</h3>
+    <ol>
+      <li>Make sure your phone and PC are on the same WiFi network</li>
+      <li>Copy the URL above and paste it in Unity</li>
+      <li>Click "Start Broadcasting" on your phone</li>
+      <li>Move your phone to control the camera in Unity!</li>
+    </ol>
+  </div>
+
+  <div>
+    <button id="startBtn">Start Broadcasting</button>
+    <button id="stopBtn">Stop Broadcasting</button>
+    <button id="calibBtn">Zero / Calibrate</button>
+  </div>
+
+  <div class="info">
+    <h3>Current Status:</h3>
+    <div id="debug">Ready to connect...</div>
+  </div>
+
+<script>
+(() => {
+  const statusEl = document.getElementById("status");
+  const startBtn = document.getElementById("startBtn");
+  const stopBtn = document.getElementById("stopBtn");
+  const calibBtn = document.getElementById("calibBtn");
+  const unityUrlEl = document.getElementById("unityUrl");
+  const debugEl = document.getElementById("debug");
+
+  let isBroadcasting = false;
+  let gotOrientation = false;
+  let alpha = 0, beta = 0, gamma = 0;
+  let qCalib = [0, 0, 0, 1];
+  let lastOrientationData = null;
+
+  // Quaternion utilities
+  function qMultiply(a, b) {
+    return [
+      a[3]*b[0] + a[0]*b[3] + a[1]*b[2] - a[2]*b[1],
+      a[3]*b[1] - a[0]*b[2] + a[1]*b[3] + a[2]*b[0],
+      a[3]*b[2] + a[0]*b[1] - a[1]*b[0] + a[2]*b[3],
+      a[3]*b[3] - a[0]*b[0] - a[1]*b[1] - a[2]*b[2],
+    ];
+  }
+  function qConjugate(q) { return [-q[0], -q[1], -q[2], q[3]]; }
+  function qNormalize(q) {
+    const m = Math.hypot(q[0], q[1], q[2], q[3]) || 1;
+    return [q[0]/m, q[1]/m, q[2]/m, q[3]/m];
+  }
+  function qFromAxisAngle(ax, ay, az, angleRad) {
+    const s = Math.sin(angleRad/2);
+    return [ax*s, ay*s, az*s, Math.cos(angleRad/2)];
+  }
+  function qFromEulerYXZ(betaRad, alphaRad, gammaRad) {
+    const cy = Math.cos(betaRad/2), sy = Math.sin(betaRad/2);
+    const cx = Math.cos(alphaRad/2), sx = Math.sin(alphaRad/2);
+    const cz = Math.cos(gammaRad/2), sz = Math.sin(gammaRad/2);
+    const x = cy*sx*cz + sy*cx*sz;
+    const y = -cy*sx*sz + sy*cx*cz;
+    const z = cy*cx*sz - sy*sx*cz;
+    const w = cy*cx*cz + sy*sx*sz;
+    return [x, y, z, w];
+  }
+
+  function computeQuaternion() {
+    const deg2rad = Math.PI/180;
+    const q = qFromEulerYXZ(beta*deg2rad, alpha*deg2rad, -gamma*deg2rad);
+    
+    // Rotate from device frame to world (-90° around X)
+    const qxNeg90 = qFromAxisAngle(1, 0, 0, -Math.PI/2);
+    let out = qMultiply(q, qxNeg90);
+    
+    // Apply calibration
+    out = qMultiply(qCalib, out);
+    
+    return qNormalize(out);
+  }
+
+  function updateStatus(text, isActive = false) {
+    statusEl.textContent = text;
+    statusEl.className = `status ${isActive ? 'active' : 'inactive'}`;
+  }
+
+  function startBroadcasting() {
+    isBroadcasting = true;
+    updateStatus("Broadcasting orientation data to Unity...", true);
+    
+    // Update orientation data continuously
+    const interval = setInterval(() => {
+      if (gotOrientation && isBroadcasting) {
+        const q = computeQuaternion();
+        lastOrientationData = {
+          type: "orientation",
+          q: q,
+          t: Date.now()
+        };
+        
+        // Update debug info
+        debugEl.innerHTML = `
+          <strong>Orientation:</strong> [${q.map(v => v.toFixed(4)).join(', ')}]<br>
+          <strong>Status:</strong> Broadcasting to Unity<br>
+          <strong>Last Update:</strong> ${new Date().toLocaleTimeString()}<br>
+          <strong>Calibration:</strong> Active
+        `;
+      }
+    }, 16); // 60fps
+    
+    window.broadcastInterval = interval;
+  }
+
+  function stopBroadcasting() {
+    isBroadcasting = false;
+    updateStatus("Stopped broadcasting", false);
+    
+    if (window.broadcastInterval) {
+      clearInterval(window.broadcastInterval);
+      window.broadcastInterval = null;
+    }
+    
+    debugEl.innerHTML = `
+      <strong>Status:</strong> Stopped<br>
+      <strong>Last Data:</strong> ${lastOrientationData ? JSON.stringify(lastOrientationData.q.map(v => v.toFixed(4))) : 'None'}
+    `;
+  }
+
+  // Device orientation event
+  window.addEventListener('deviceorientation', (e) => {
+    if (e.alpha == null || e.beta == null || e.gamma == null) return;
+    alpha = e.alpha;
+    beta = e.beta;
+    gamma = e.gamma;
+    gotOrientation = true;
+  }, true);
+
+  // Request permissions (iOS)
+  async function requestPermissions() {
+    if (window.DeviceMotionEvent && typeof DeviceMotionEvent.requestPermission === 'function') {
+      try {
+        const result = await DeviceMotionEvent.requestPermission();
+        if (result === 'granted') {
+          console.log("Motion permission granted");
+        }
+      } catch (e) {
+        console.log("Motion permission denied");
+      }
+    }
+    
+    if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function') {
+      try {
+        const result = await DeviceOrientationEvent.requestPermission();
+        if (result === 'granted') {
+          console.log("Orientation permission granted");
+        }
+      } catch (e) {
+        console.log("Orientation permission denied");
+      }
+    }
+  }
+
+  // Get current URL for Unity to connect to
+  function getUnityUrl() {
+    const currentUrl = window.location.href;
+    return currentUrl;
+  }
+
+  // Initialize
+  async function init() {
+    await requestPermissions();
+    
+    // Show the current URL for Unity to connect to
+    const url = getUnityUrl();
+    unityUrlEl.textContent = url;
+    
+    updateStatus("Ready - Unity can connect to this URL", false);
+  }
+
+  // Event handlers
+  startBtn.onclick = startBroadcasting;
+  stopBtn.onclick = stopBroadcasting;
+  calibBtn.onclick = () => {
+    qCalib = [0, 0, 0, 1];
+    const qRaw = computeQuaternion();
+    qCalib = qConjugate(qRaw);
+    updateStatus("Calibrated! Current position is now neutral.", isBroadcasting);
+  };
+
+  // Start initialization
+  init();
+})();
+</script>
+</body>
+</html>
