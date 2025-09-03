@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+<head>
+    <title>Test Controller</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+    <h1>Test Controller</h1>
+    <div id="status">Ready</div>
+    <div id="data">No data yet</div>
+    
+    <script>
+        // Simple test data that Unity can easily find
+        let testData = {
+            orientation: [0.0, 0.0, 0.0, 1.0],
+            timestamp: Date.now()
+        };
+        
+        // Update data every second
+        setInterval(() => {
+            testData.timestamp = Date.now();
+            document.getElementById('data').textContent = 
+                `Orientation: [${testData.orientation.join(', ')}] | Time: ${testData.timestamp}`;
+        }, 1000);
+        
+        // Add device orientation if available
+        if (window.DeviceOrientationEvent) {
+            window.addEventListener('deviceorientation', (e) => {
+                if (e.alpha !== null && e.beta !== null && e.gamma !== null) {
+                    testData.orientation = [e.alpha/180, e.beta/180, e.gamma/180, 1.0];
+                }
+            });
+        }
+    </script>
+</body>
+</html>
