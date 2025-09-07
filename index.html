@@ -81,14 +81,21 @@
                     'Content-Type': 'application/json',
                     'X-Master-Key': CLOUD_API_KEY
                 },
-                body: JSON.stringify(motionData)
+                body: JSON.stringify(motionData),
+                mode: 'cors'
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
             .then(data => {
                 cloudStatusEl.textContent = 'Cloud connected - ' + new Date().toLocaleTimeString();
             })
             .catch(error => {
                 cloudStatusEl.textContent = 'Cloud error: ' + error.message;
+                console.error('Cloud send error:', error);
             });
         }
         
@@ -168,15 +175,23 @@
         fetch(cloudUrl, {
             method: 'GET',
             headers: {
-                'X-Master-Key': CLOUD_API_KEY
-            }
+                'X-Master-Key': CLOUD_API_KEY,
+                'Content-Type': 'application/json'
+            },
+            mode: 'cors'
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            return response.json();
+        })
         .then(data => {
             cloudStatusEl.textContent = 'Cloud connected - ready to send motion data';
         })
         .catch(error => {
-            cloudStatusEl.textContent = 'Cloud setup needed - see instructions below';
+            cloudStatusEl.textContent = 'Cloud error: ' + error.message;
+            console.error('Cloud connection error:', error);
         });
         
         // Initial update
@@ -196,4 +211,3 @@
     </div>
 </body>
 </html>
-
