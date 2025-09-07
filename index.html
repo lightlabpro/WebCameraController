@@ -1,0 +1,145 @@
+<!doctype html>
+<html>
+<head>
+    <title>Live Motion Controller</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #1a1a1a; color: white; }
+        .data { background: #198754; padding: 20px; border-radius: 8px; margin: 20px 0; font-size: 18px; }
+        .status { background: #0d6efd; padding: 15px; border-radius: 8px; margin: 15px 0; }
+        .button { background: #dc3545; color: white; border: none; padding: 15px 30px; font-size: 18px; border-radius: 8px; cursor: pointer; margin: 10px; }
+        .button:hover { background: #c82333; }
+    </style>
+</head>
+<body>
+    <h1>📱 Live Motion Controller</h1>
+    
+    <div class="status">
+        <strong>Status:</strong> <span id="status">Initializing...</span>
+    </div>
+    
+    <div class="data">
+        <strong>Orientation: [0.0000, 0.0000, 0.0000, 1.0000]</strong>
+    </div>
+    
+    <button class="button" onclick="requestPermission()">🔓 Request Motion Permission</button>
+    <button class="button" onclick="testMotion()">🧪 Test Motion</button>
+    
+    <p>Move your phone to control the camera in Unity!</p>
+    
+    <script>
+        var statusEl = document.getElementById('status');
+        var dataEl = document.querySelector('.data');
+        
+        // Current orientation values
+        var currentX = 0.0;
+        var currentY = 0.0;
+        var currentZ = 0.0;
+        var currentW = 1.0;
+        var hasPermission = false;
+        
+        // Update display and page title for Unity to read
+        function updateDisplay() {
+            // Update the visible display
+            dataEl.innerHTML = '<strong>Orientation: [' + 
+                currentX.toFixed(4) + ', ' + 
+                currentY.toFixed(4) + ', ' + 
+                currentZ.toFixed(4) + ', ' + 
+                currentW.toFixed(4) + ']</strong>';
+            
+            // Update page title (Unity reads this)
+            document.title = 'Orientation: [' + 
+                currentX.toFixed(4) + ', ' + 
+                currentY.toFixed(4) + ', ' + 
+                currentZ.toFixed(4) + ', ' + 
+                currentW.toFixed(4) + ']';
+            
+            // Update status
+            if (hasPermission) {
+                statusEl.textContent = 'Live motion active - ' + new Date().toLocaleTimeString();
+            } else {
+                statusEl.textContent = 'Permission needed - Click button above';
+            }
+        }
+        
+        // Request permission for device orientation
+        function requestPermission() {
+            statusEl.textContent = 'Requesting permission...';
+            
+            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                // iOS 13+ requires permission
+                DeviceOrientationEvent.requestPermission()
+                    .then(response => {
+                        if (response == 'granted') {
+                            hasPermission = true;
+                            statusEl.textContent = 'Permission granted! Move your phone.';
+                            startMotionTracking();
+                        } else {
+                            hasPermission = false;
+                            statusEl.textContent = 'Permission denied. Please allow motion access.';
+                        }
+                    })
+                    .catch(error => {
+                        statusEl.textContent = 'Permission request failed: ' + error;
+                    });
+            } else {
+                // Android or older iOS
+                hasPermission = true;
+                statusEl.textContent = 'Permission not needed. Starting motion tracking...';
+                startMotionTracking();
+            }
+        }
+        
+        // Test motion function
+        function testMotion() {
+            currentX = Math.sin(Date.now() / 1000) * 0.5;
+            currentY = Math.cos(Date.now() / 1000) * 0.5;
+            currentZ = Math.sin(Date.now() / 2000) * 0.3;
+            currentW = 1.0;
+            updateDisplay();
+        }
+        
+        // Start motion tracking
+        function startMotionTracking() {
+            if (window.DeviceOrientationEvent) {
+                statusEl.textContent = 'Device orientation supported - tracking motion...';
+                
+                // Listen for orientation changes
+                window.addEventListener('deviceorientation', function(event) {
+                    if (event.alpha !== null && event.beta !== null && event.gamma !== null) {
+                        // Convert to quaternion (simplified)
+                        currentX = (event.alpha / 180) * 0.5;
+                        currentY = (event.beta / 180) * 0.5;
+                        currentZ = (event.gamma / 180) * 0.5;
+                        currentW = 1.0;
+                        
+                        // Update display immediately
+                        updateDisplay();
+                    }
+                });
+                
+            } else {
+                statusEl.textContent = 'Device orientation not supported';
+                dataEl.innerHTML = '<strong style="color: red;">Device orientation not supported</strong>';
+            }
+        }
+        
+        // Check if device orientation is supported
+        if (window.DeviceOrientationEvent) {
+            statusEl.textContent = 'Device orientation supported - click button to start';
+        } else {
+            statusEl.textContent = 'Device orientation not supported';
+            dataEl.innerHTML = '<strong style="color: red;">Device orientation not supported</strong>';
+        }
+        
+        // Force constant updates every 100ms to ensure Unity gets fresh data
+        setInterval(function() {
+            updateDisplay();
+        }, 100);
+        
+        // Initial update
+        updateDisplay();
+    </script>
+</body>
+</html>
